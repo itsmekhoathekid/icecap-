@@ -41,7 +41,10 @@ def add_summary_value(writer, key, value, iteration):
 
 def train(opt):
     np.random.seed(42)
+    early_stopper = 25
+    count_stop = 0
     warnings.filterwarnings('ignore')
+    print('early stopper threshold: ', early_stopper)
     print('batch size: ', opt.batch_size)
     print('max epochs:', opt.max_epochs)
     print('sent init:', opt.sen_init)
@@ -67,7 +70,7 @@ def train(opt):
     if 'breakingnews' in opt.dataset:
         log_step = 200
     else:
-        log_step = 1
+        log_step = 50
     # for debug purposes
     # a=get_batch_one(opt, [loader.split_ix, loader.shuffle, loader.iterators, loader.label_start_ix, loader.label_end_ix])
     # loader.get_batch('train')
@@ -266,25 +269,29 @@ def train(opt):
         end = time.time()
 
         if iteration % log_step == 0:
-            if opt.pointer_matching:
-                train_loss_cap = cap_loss.item()
-                train_loss_match = match_loss.item()
-                print(
-                    "Step [{}/{}], Epoch [{}/{}],  train_loss(cap) = {:.3f}, train_loss(match) = {:.3f}, time/batch = {:.3f}" \
-                    .format((iteration + 1) % int(len(loader) / vars(opt)['batch_size']),
-                            int(len(loader) / vars(opt)['batch_size']),
-                            epoch, vars(opt)['max_epochs'], train_loss_cap, train_loss_match, end - start))
-            else:
-                print("Step [{}/{}], Epoch [{}/{}],  train_loss = {:.3f}, time/batch = {:.3f}" \
-                      .format((iteration + 1) % int(len(loader) / vars(opt)['batch_size']),
-                              int(len(loader) / vars(opt)['batch_size']),
-                              epoch, vars(opt)['max_epochs'], train_loss, end - start))
+            try:
+                if opt.pointer_matching:
+                    train_loss_cap = cap_loss.item()
+                    train_loss_match = match_loss.item()
+                    print(
+                        "Step [{}/{}], Epoch [{}/{}],  train_loss(cap) = {:.3f}, train_loss(match) = {:.3f}, time/batch = {:.3f}" \
+                        .format((iteration + 1) % int(len(loader) / vars(opt)['batch_size']),
+                                int(len(loader) / vars(opt)['batch_size']),
+                                epoch, vars(opt)['max_epochs'], train_loss_cap, train_loss_match, end - start))
+                else:
+                    print("Step [{}/{}], Epoch [{}/{}],  train_loss = {:.3f}, time/batch = {:.3f}" \
+                        .format((iteration + 1) % int(len(loader) / vars(opt)['batch_size']),
+                                int(len(loader) / vars(opt)['batch_size']),
+                                epoch, vars(opt)['max_epochs'], train_loss, end - start))
+            except:
+                print("error printout log step")
 
         # Update the iteration and epoch
         iteration += 1
         if data['bounds']['wrapped']:
             epoch += 1
             update_lr_flag = True
+            count_stop +=1
 
         # Write the training loss summary
         if (iteration % opt.losses_log_every == 0):
@@ -327,6 +334,7 @@ def train(opt):
                     best_flag = True
                     best_epoch = epoch
                 print('best model in epoch: ', best_epoch)
+                count_stop = 0
                 if not os.path.exists(opt.checkpoint_path + opt.caption_model):
                     os.makedirs(opt.checkpoint_path + opt.caption_model)
                 checkpoint_path = os.path.join(opt.checkpoint_path + opt.caption_model, 'model.pth')
@@ -371,7 +379,7 @@ def train(opt):
                         cPickle.dump(infos, f)
 
         # Stop if reaching max epochs
-        if epoch >= opt.max_epochs and opt.max_epochs != -1:
+        if (epoch >= opt.max_epochs and opt.max_epochs != -1) or count_stop == early_stopper:
             break
 
 

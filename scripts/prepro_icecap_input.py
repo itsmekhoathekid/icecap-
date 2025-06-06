@@ -40,10 +40,10 @@ import math
 # import stop_words
 from difflib import SequenceMatcher
 import json
-from py_vncorenlp import VnCoreNLP
+# from py_vncorenlp import VnCoreNLP
 
 def load_vocab(params):
-    vocab_path = '/content/ICECAP/'+params['dataset']+'_data/'+params['dataset']+'_threshold4_vocab.json'
+    vocab_path = '/data/npl/ICEK/ICECAP/icecap-/'+params['dataset']+'_data/'+params['dataset']+'_threshold4_vocab.json'
     vocab = json.load(open(vocab_path, 'r', encoding='utf-8'))
     return vocab
 
@@ -226,7 +226,7 @@ def to_pointers_cap(ent_txt, ent_type, article_ner_pointers, part=True, type_com
         return -1
 
 def load_stop_words():
-    with open('/content/ICECAP/vietnamese-stopwords.txt', 'r', encoding='utf-8') as file:
+    with open('/data/npl/ICEK/ICECAP/icecap-/vietnamese-stopwords.txt', 'r', encoding='utf-8') as file:
         stopwords = list(set(file.read().splitlines()))
     # for i, stop_word in enumerate(stopwords):
     #     stopwords[i] = model.word_segment(stop_word)[0]
@@ -243,7 +243,7 @@ def encode_related_sentences(imgs, articles, wtoi, params):
     retr_w_num = 0
     retr_unk_num = 0
     # if params['name_att']:
-    with open('/content/ICECAP/'+params['dataset']+'_data/' + params['dataset'] + '_df.json', 'r') as f:
+    with open('/data/npl/ICEK/ICECAP/icecap-/'+params['dataset']+'_data/' + params['dataset'] + '_df.json', 'r') as f:
         df_dict = json.load(f)
     stopwords = load_stop_words()
     candidates_dict = {}
@@ -372,7 +372,7 @@ def encode_related_sentences(imgs, articles, wtoi, params):
 
     print('retr unk %.4f' % (float(retr_unk_num)/retr_w_num))
 
-    save_dir = '/content/ICECAP/'+params['dataset']+'_data/'
+    save_dir = '/data/npl/ICEK/ICECAP/icecap-/'+params['dataset']+'_data/'
     # h5 file to store id sequence of concatenated retrieved sentences
     retr_w_lb_name = save_dir + params['dataset'] + '_retr10_words' + str(params['max_word_num']) +  '_word_ids.h5'
     retr_w_lb = h5py.File(retr_w_lb_name, "w")
@@ -403,9 +403,9 @@ def encode_related_sentences(imgs, articles, wtoi, params):
 
 
 def main(params):
-    cap_json_path = '/content/ICECAP/'+params['dataset']+'_data/'+params['dataset']+'_ttv.json'
+    cap_json_path = '/data/npl/ICEK/ICECAP/icecap-/'+params['dataset']+'_data/'+params['dataset']+'_ttv.json'
     imgs = json.load(open(cap_json_path, 'r'))
-    article_json_path = '/content/ICECAP/'+params['dataset']+'_data/'+params['dataset']+'_article_icecap.json'
+    article_json_path = '/data/npl/ICEK/ICECAP/icecap-/'+params['dataset']+'_data/'+params['dataset']+'_article_icecap.json'
     with open(article_json_path, 'r') as f:
          articles = json.load(f)
 
@@ -428,7 +428,7 @@ def main(params):
 
     # N = len(imgs)
     # h5 file to store id sequence of gt caption
-    cap_h5_path = '/content/ICECAP/'+params['dataset']+'_data/'+params['dataset']+'_cap_label.h5'
+    cap_h5_path = '/data/npl/ICEK/ICECAP/icecap-/'+params['dataset']+'_data/'+params['dataset']+'_cap_label.h5'
     f_lb = h5py.File(cap_h5_path, "w")
     f_lb.create_dataset("labels", dtype='uint32', data=L)
     f_lb.create_dataset("label_start_ix", dtype='uint32', data=label_start_ix)
@@ -454,7 +454,7 @@ def main(params):
 
         out['images'].append(jimg) # thì ra đây là nơi chứa ảnh 
     # store basic information (e.g. id2word dictionary and filepath of each image)
-    basic_info_json_path = '/content/ICECAP/'+params['dataset']+'_data/'+params['dataset']+'_cap_basic.json'
+    basic_info_json_path = '/data/npl/ICEK/ICECAP/icecap-/'+params['dataset']+'_data/'+params['dataset']+'_cap_basic.json'
     json.dump(out, open(basic_info_json_path, 'w'))
     print('basic info json save to', basic_info_json_path)
 

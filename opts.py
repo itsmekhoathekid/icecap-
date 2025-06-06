@@ -88,7 +88,7 @@ def parse_opt():
                             help='max word num for an article')
         parser.add_argument('--batch_size', type=int, default=32,  # 32
                             help='minibatch size')
-        parser.add_argument('--save_checkpoint_every', type=int, default= 100,  # 12000
+        parser.add_argument('--save_checkpoint_every', type=int, default= 150000,  # 12000
                             help='how often to save a model checkpoint (in iterations)?')
 
     # used for continue train a checkpoint
@@ -122,7 +122,7 @@ def parse_opt():
     parser.add_argument('--att_feat_size', type=int, default=2048,
                         help='2048 for resnet, 512 for vgg')
 
-    parser.add_argument('--max_epochs', type=int, default=10,  # 25
+    parser.add_argument('--max_epochs', type=int, default=9999,  # 25
                         help='number of epochs')
     parser.add_argument('--grad_clip', type=float, default=5.0,  # 5.,
                         help='clip gradients at this value')

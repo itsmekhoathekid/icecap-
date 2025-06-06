@@ -24,7 +24,7 @@ def save_h5(file_save, data):
 if __name__ == '__main__':
     dataset = 'ViWiki'  # breakingewns/goodnews
     np.random.seed(42)
-    data_com = h5py.File('/content/ICECAP/'+dataset+'_data/'+dataset+'_articles_full_WeightedAvg.h5')
+    data_com = h5py.File('/data/npl/ICEK/ICECAP/icecap-/'+dataset+'_data/'+dataset+'_articles_full_WeightedAvg.h5')
     data_com = [np.stack(d) for d in tqdm.tqdm(data_com.get('average'))]
     lengths = [d.shape[1] for d in data_com]
     data_com = [d.reshape(-1, 300) for d in data_com]
@@ -39,6 +39,6 @@ if __name__ == '__main__':
     for l in lengths:
         new.append(data_com[index:index + l].reshape(300, -1))
         index += l
-    keys = open_json('/content/ICECAP/'+dataset+'_data/'+dataset+'_articles_full_WeightedAvg_keys.json')
-    json.dump(keys, open('/content/ICECAP/'+dataset+'_data/'+dataset+'_articles_full_TBB_keys.json', 'w', encoding='utf-8'))
-    save_h5('/content/ICECAP/'+dataset+'_data/'+dataset+'_articles_full_TBB.h5', new)
+    keys = open_json('/data/npl/ICEK/ICECAP/icecap-/'+dataset+'_data/'+dataset+'_articles_full_WeightedAvg_keys.json')
+    json.dump(keys, open('/data/npl/ICEK/ICECAP/icecap-/'+dataset+'_data/'+dataset+'_articles_full_TBB_keys.json', 'w', encoding='utf-8'))
+    save_h5('/data/npl/ICEK/ICECAP/icecap-/'+dataset+'_data/'+dataset+'_articles_full_TBB.h5', new)
