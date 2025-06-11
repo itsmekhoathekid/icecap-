@@ -17,12 +17,12 @@ from dataloader import *
 import eval_utils
 import misc.utils as utils
 import numpy as np
-try:
-    import tensorflow as tf
+# try:
+#     import tensorflow as tf
 
-except ImportError:
-    print("Tensorflow not installed; No tensorboard logging.")
-    tf = None
+# except ImportError:
+#     print("Tensorflow not installed; No tensorboard logging.")
+tf = None
 import os
 
 os.environ["CUDA_VISIBLE_DEVICES"] = '0'
@@ -40,6 +40,7 @@ def add_summary_value(writer, key, value, iteration):
 #     return DataLoader.get_batch_one(*arg, **kwarg)
 
 def train(opt):
+    print("Hello, start script!")
     np.random.seed(42)
     early_stopper = 25
     count_stop = 0
@@ -70,7 +71,7 @@ def train(opt):
     if 'breakingnews' in opt.dataset:
         log_step = 200
     else:
-        log_step = 50
+        log_step = 100
     # for debug purposes
     # a=get_batch_one(opt, [loader.split_ix, loader.shuffle, loader.iterators, loader.label_start_ix, loader.label_end_ix])
     # loader.get_batch('train')
@@ -80,7 +81,9 @@ def train(opt):
     else:
         for path in os.listdir(opt.checkpoint_path + 'tensorboard/'):
             os.remove(opt.checkpoint_path + 'tensorboard/' + path)
-    tf_summary_writer = tf.summary.create_file_writer(opt.checkpoint_path + 'tensorboard/')
+    
+    if tf is not None:
+        tf_summary_writer = tf.summary.create_file_writer(opt.checkpoint_path + 'tensorboard/')
     np.random.seed(42)
     infos = {}
     histories = {}
@@ -382,6 +385,6 @@ def train(opt):
         if (epoch >= opt.max_epochs and opt.max_epochs != -1) or count_stop == early_stopper:
             break
 
-
+print("Start parse opt!")
 opt = opts.parse_opt()
 train(opt)

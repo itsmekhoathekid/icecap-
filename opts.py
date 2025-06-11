@@ -9,7 +9,7 @@ def parse_opt():
     # Data input settings
     dataset = 'ViWiki'
     retr_num = 10
-    data_dir = '/content/ICECAP/' + dataset + '_data/'
+    data_dir = '/data/npl/ICEK/ICECAP/icecap-/' + dataset + '_data/'
     parser.add_argument('--dataset', type=str, default=dataset, choices=['breakingnews', 'goodnews','ViWiki'])
     
     # file paths
@@ -49,7 +49,7 @@ def parse_opt():
                         help='whether to use global article feature as init state of decoder')
     parser.add_argument('--sen_init_type', type=str, default='sum',  # avg/sum
                         help='whether to use sentence embedding as init state of decoder')
-    parser.add_argument('--sen_sim_init', type=bool, default=True,
+    parser.add_argument('--sen_sim_init', type=bool, default=False,
                         help='whether to use top k most similar sentence embedding as init state of decoder')
 
     # for word-level attention
