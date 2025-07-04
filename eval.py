@@ -22,7 +22,8 @@ import torch
 os.environ["CUDA_VISIBLE_DEVICES"] = '0'
 
 dataset = 'ViWiki'  # breakingnews/goodnews
-data_dir = '/content/ICECAP/' + dataset + '_data/'
+data_dir = '/data/npl/ICEK/ICECAP/icecap-/' + dataset + '_data/'
+
 # Input arguments and options
 parser = argparse.ArgumentParser()
 parser.add_argument('--dataset', type=str, default=dataset, choices=['breakingnews', 'goodnews','ViWiki'])
@@ -31,13 +32,13 @@ parser.add_argument('--split', type=str, default='test', help='val/test')
 
 # Input paths
 parser.add_argument('--model_path', type=str,
-                    default='/content/' + dataset + '_save/show_attend_tell_watt_glove/model-best.pth',
+                    default='/data/npl/ICEK/ICECAP/icecap-/' + dataset + '_save/ICECAP_matchs02_retr10/model-best.pth',
                     help='path to model to evaluate')
 parser.add_argument('--cnn_model_path', type=str,
-                    default='/content/' + dataset + '_save/show_attend_tell_watt_glove/model-cnn-best.pth',
+                    default='/data/npl/ICEK/ICECAP/icecap-/' + dataset + '_save/ICECAP_matchs02_retr10/model-cnn-best.pth',
                     help='path to cnn model to evaluate')
 parser.add_argument('--infos_path', type=str,
-                    default='/content/' + dataset + '_save/show_attend_tell_watt_glove/infos_-best.pkl',
+                    default='/data/npl/ICEK/ICECAP/icecap-/' + dataset + '_save/ICECAP_matchs02_retr10/infos_-best.pkl',
                     help='path to infos to evaluate')
 
 # file paths
@@ -129,7 +130,7 @@ opt = parser.parse_args()
 # Load infos
 with open(opt.infos_path, 'rb') as f:
     infos = pickle.load(f, encoding='iso-8859-1')
-
+print("LOADED INFO!")
 # override and collect parameters
 if len(opt.input_label_h5) == 0:
     opt.input_label_h5 = infos['opt'].input_label_h5
@@ -141,7 +142,7 @@ if opt.batch_size == 0:
     opt.batch_size = infos['opt'].batch_size
 if len(opt.id) == 0:
     opt.id = infos['opt'].id
-
+print("LOADED ARGS!")
 ignore = ["id", "batch_size", "beam_size", "start_from", "dataset"]  # , "language_eval"
 for k in vars(infos['opt']).keys():
     if k not in ignore:
@@ -156,6 +157,7 @@ if 'index_size' not in vars(opt):
     opt.index_size = -1
 # print('index size:', opt.index_size)
 # print('word length', opt.word_length)
+print("LOADED VOCAB!")
 
 # Setup the model
 cnn_model = utils.build_cnn(opt)
@@ -176,12 +178,15 @@ else:
     crit = utils.LanguageModelCriterion()
 
 opt.seq_per_img = 1
+print("LOADED MODEL!")
 # Create the Data Loader instance
 loader = DataLoader(opt)
 # When eval using provided pretrained model, the vocab may be different from what you have in your cocotalk.json
 # So make sure to use the vocab in infos file.
 loader.ix_to_word = infos['vocab']
+print("LOADED DATA!")
 
+print("START EVAL!")
 # Set sample options
 loss, split_predictions, lang_stats = eval_utils.eval_split(cnn_model, model, crit, loader,
                                                             vars(opt), return_attention=opt.return_attention,
@@ -192,7 +197,10 @@ if lang_stats:
     print(lang_stats)
 
 if opt.dump_json == 1:
+    # print('template captions save to',
+    #       'vis/' + opt.split + '_vis_' + vars(infos['opt'])['caption_model'] + '_' + vars(opt)['save_name'] + '.json')
+    # json.dump(split_predictions, open('content/' + opt.split + '_vis_' + vars(infos['opt'])['caption_model'] +
+    #                                   '_' + vars(opt)['save_name'] + '.json', 'w'))
     print('template captions save to',
-          'vis/' + opt.split + '_vis_' + vars(infos['opt'])['caption_model'] + '_' + vars(opt)['save_name'] + '.json')
-    json.dump(split_predictions, open('content/' + opt.split + '_vis_' + vars(infos['opt'])['caption_model'] +
-                                      '_' + vars(opt)['save_name'] + '.json', 'w'))
+          '/data/npl/ICEK/ICECAP/icecap-/ViWiki_output/ViWiki_test.json')
+    json.dump(split_predictions, open('/data/npl/ICEK/ICECAP/icecap-/ViWiki_output/ViWiki_test.json', 'w'))

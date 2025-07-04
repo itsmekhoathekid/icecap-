@@ -9,7 +9,7 @@ def parse_opt():
     # Data input settings
     dataset = 'ViWiki'
     retr_num = 10
-    data_dir = '/content/ICECAP/' + dataset + '_data/'
+    data_dir = '/data/npl/ICEK/ICECAP/icecap-/' + dataset + '_data/'
     parser.add_argument('--dataset', type=str, default=dataset, choices=['breakingnews', 'goodnews','ViWiki'])
     
     # file paths
@@ -49,7 +49,7 @@ def parse_opt():
                         help='whether to use global article feature as init state of decoder')
     parser.add_argument('--sen_init_type', type=str, default='sum',  # avg/sum
                         help='whether to use sentence embedding as init state of decoder')
-    parser.add_argument('--sen_sim_init', type=bool, default=True,
+    parser.add_argument('--sen_sim_init', type=bool, default=False,
                         help='whether to use top k most similar sentence embedding as init state of decoder')
 
     # for word-level attention
@@ -88,7 +88,7 @@ def parse_opt():
                             help='max word num for an article')
         parser.add_argument('--batch_size', type=int, default=32,  # 32
                             help='minibatch size')
-        parser.add_argument('--save_checkpoint_every', type=int, default= 100,  # 12000
+        parser.add_argument('--save_checkpoint_every', type=int, default= 5000,  # 12000
                             help='how often to save a model checkpoint (in iterations)?')
 
     # used for continue train a checkpoint
@@ -122,7 +122,7 @@ def parse_opt():
     parser.add_argument('--att_feat_size', type=int, default=2048,
                         help='2048 for resnet, 512 for vgg')
 
-    parser.add_argument('--max_epochs', type=int, default=10,  # 25
+    parser.add_argument('--max_epochs', type=int, default=9999,  # 25
                         help='number of epochs')
     parser.add_argument('--grad_clip', type=float, default=5.0,  # 5.,
                         help='clip gradients at this value')

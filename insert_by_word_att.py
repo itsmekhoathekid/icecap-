@@ -16,7 +16,7 @@ def open_json(path):
         return json.load(f)
 
 def load_stop_words():
-    with open('/content/ICECAP/vietnamese-stopwords.txt', 'r', encoding='utf-8') as file:
+    with open('/data/npl/ICEK/ICECAP/icecap-/vietnamese-stopwords.txt', 'r', encoding='utf-8') as file:
         stopwords = list(set(file.read().splitlines()))
     # for i, stop_word in enumerate(stopwords):
     #     stopwords[i] = model.word_segment(stop_word)[0]
@@ -161,7 +161,7 @@ def main(params):
     dataset = params['dataset']
     split = params['split']
     template_path = params['template_path']
-    ttv_items = open_json('/content/ICECAP/'+dataset+'_data/' + dataset + '_ttv.json')
+    ttv_items = open_json('/data/npl/ICEK/ICECAP/icecap-/'+dataset+'_data/' + dataset + '_ttv.json')
     id_retr = {}
     for item in ttv_items:
         if item['split'] == split:
@@ -172,8 +172,8 @@ def main(params):
             else:
                 id_retr[item['cocoid']] = []
     del ttv_items
-    test_compact = open_json('/content/ICECAP/'+dataset+'_data/' + dataset + '_' + split + '.json')
-    article_dataset = open_json('/content/ICECAP/'+dataset+'_data/' + dataset + '_article_icecap.json')
+    test_compact = open_json('/data/npl/ICEK/ICECAP/icecap-/'+dataset+'_data/' + dataset + '_' + split + '.json')
+    article_dataset = open_json('/data/npl/ICEK/ICECAP/icecap-/'+dataset+'_data/' + dataset + '_article_icecap.json')
     stopwords = load_stop_words()
 
     # Start the insertion process
@@ -232,10 +232,10 @@ def main(params):
 
 if __name__=='__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--dataset', default='goodnews', choices=['breakingnews', 'goodnews','ViWiki'])
+    parser.add_argument('--dataset', default='ViWiki', choices=['breakingnews', 'goodnews','ViWiki'])
     parser.add_argument('--split', default='test', choices=['test', 'val'])
     parser.add_argument('--template_path', type=str,
-                        default='/content/test_vis_show_attend_tell_watt_glove_goodnews.json',
+                        default='/data/npl/ICEK/ICECAP/icecap-/ViWiki_output/ViWiki_test.json',
                         help='template path to insert named entities according word-level matching distribution')
     parser.add_argument('--dump', type=bool, default=False, help='Save the inserted captions in a json file')
     args = parser.parse_args()

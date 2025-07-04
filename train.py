@@ -1,9 +1,9 @@
 # Use tensorboard
-
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import warnings
 import torch
 import torch.nn as nn
 from torch.autograd import Variable
@@ -17,12 +17,12 @@ from dataloader import *
 import eval_utils
 import misc.utils as utils
 import numpy as np
-try:
-    import tensorflow as tf
+# try:
+#     import tensorflow as tf
 
-except ImportError:
-    print("Tensorflow not installed; No tensorboard logging.")
-    tf = None
+# except ImportError:
+#     print("Tensorflow not installed; No tensorboard logging.")
+tf = None
 import os
 
 os.environ["CUDA_VISIBLE_DEVICES"] = '0'
@@ -40,8 +40,12 @@ def add_summary_value(writer, key, value, iteration):
 #     return DataLoader.get_batch_one(*arg, **kwarg)
 
 def train(opt):
+    print("Hello, start script!")
     np.random.seed(42)
+    early_stopper = 25
+    count_stop = 0
     warnings.filterwarnings('ignore')
+    print('early stopper threshold: ', early_stopper)
     print('batch size: ', opt.batch_size)
     print('max epochs:', opt.max_epochs)
     print('sent init:', opt.sen_init)
@@ -67,7 +71,7 @@ def train(opt):
     if 'breakingnews' in opt.dataset:
         log_step = 200
     else:
-        log_step = 1
+        log_step = 50
     # for debug purposes
     # a=get_batch_one(opt, [loader.split_ix, loader.shuffle, loader.iterators, loader.label_start_ix, loader.label_end_ix])
     # loader.get_batch('train')
@@ -77,7 +81,9 @@ def train(opt):
     else:
         for path in os.listdir(opt.checkpoint_path + 'tensorboard/'):
             os.remove(opt.checkpoint_path + 'tensorboard/' + path)
-    tf_summary_writer = tf.summary.create_file_writer(opt.checkpoint_path + 'tensorboard/')
+    
+    if tf is not None:
+        tf_summary_writer = tf.summary.create_file_writer(opt.checkpoint_path + 'tensorboard/')
     np.random.seed(42)
     infos = {}
     histories = {}
@@ -225,6 +231,22 @@ def train(opt):
                 if opt.pointer_matching:
                     match_labels = Variable(torch.from_numpy(np.array(data['match_labels']))).cuda()
                     match_masks = Variable(torch.from_numpy(np.array(data['match_masks']))).cuda()
+                    # Debug: Check match_mask content
+                    # print(f"[Debug] match_labels shape: {match_labels.shape}")
+                    # print(f"[Debug] match_masks shape: {match_masks.shape}")
+                    # print(f"[Debug] Total non-zero entries in match_masks: {match_masks.sum().item()}")
+                    # print("MATCH LABELS:")
+                    # print(match_labels)
+                    # print("MATCH MASKS")
+                    # print(match_masks)
+
+                    # Flatten to simulate how LanguageModelMatchCriterion handles them
+                    match_masks_flat = match_masks.view(-1, match_masks.size(-1))
+                    mask_num = torch.nonzero(torch.sum(match_masks_flat, dim=1)).size(0)
+                    # print(f"[Debug] Number of valid match entries (mask_num): {mask_num}")
+
+                    if mask_num == 0:
+                        print("[Warning] match_mask is empty! This will cause NaN in match_loss.")
                 if opt.index_size != -1:
                     similar_words_index = Variable(torch.from_numpy(np.array(data['sim_words_index']))).cuda()
                 else:
@@ -266,25 +288,29 @@ def train(opt):
         end = time.time()
 
         if iteration % log_step == 0:
-            if opt.pointer_matching:
-                train_loss_cap = cap_loss.item()
-                train_loss_match = match_loss.item()
-                print(
-                    "Step [{}/{}], Epoch [{}/{}],  train_loss(cap) = {:.3f}, train_loss(match) = {:.3f}, time/batch = {:.3f}" \
-                    .format((iteration + 1) % int(len(loader) / vars(opt)['batch_size']),
-                            int(len(loader) / vars(opt)['batch_size']),
-                            epoch, vars(opt)['max_epochs'], train_loss_cap, train_loss_match, end - start))
-            else:
-                print("Step [{}/{}], Epoch [{}/{}],  train_loss = {:.3f}, time/batch = {:.3f}" \
-                      .format((iteration + 1) % int(len(loader) / vars(opt)['batch_size']),
-                              int(len(loader) / vars(opt)['batch_size']),
-                              epoch, vars(opt)['max_epochs'], train_loss, end - start))
+            try:
+                if opt.pointer_matching:
+                    train_loss_cap = cap_loss.item()
+                    train_loss_match = match_loss.item()
+                    print(
+                        "Step [{}/{}], Epoch [{}/{}],  train_loss(cap) = {:.3f}, train_loss(match) = {:.3f}, time/batch = {:.3f}" \
+                        .format((iteration + 1) % int(len(loader) / vars(opt)['batch_size']),
+                                int(len(loader) / vars(opt)['batch_size']),
+                                epoch, vars(opt)['max_epochs'], train_loss_cap, train_loss_match, end - start))
+                else:
+                    print("Step [{}/{}], Epoch [{}/{}],  train_loss = {:.3f}, time/batch = {:.3f}" \
+                        .format((iteration + 1) % int(len(loader) / vars(opt)['batch_size']),
+                                int(len(loader) / vars(opt)['batch_size']),
+                                epoch, vars(opt)['max_epochs'], train_loss, end - start))
+            except:
+                print("error printout log step")
 
         # Update the iteration and epoch
         iteration += 1
         if data['bounds']['wrapped']:
             epoch += 1
             update_lr_flag = True
+            count_stop +=1
 
         # Write the training loss summary
         if (iteration % opt.losses_log_every == 0):
@@ -326,6 +352,7 @@ def train(opt):
                     best_val_score = current_score
                     best_flag = True
                     best_epoch = epoch
+                    count_stop = 0
                 print('best model in epoch: ', best_epoch)
                 if not os.path.exists(opt.checkpoint_path + opt.caption_model):
                     os.makedirs(opt.checkpoint_path + opt.caption_model)
@@ -371,9 +398,9 @@ def train(opt):
                         cPickle.dump(infos, f)
 
         # Stop if reaching max epochs
-        if epoch >= opt.max_epochs and opt.max_epochs != -1:
+        if (epoch >= opt.max_epochs and opt.max_epochs != -1) or count_stop == early_stopper:
             break
 
-
+print("Start parse opt!")
 opt = opts.parse_opt()
 train(opt)
