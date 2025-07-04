@@ -1,103 +1,143 @@
-"""
-Preprocess a raw json dataset into hdf5/json files for use in data_loader.lua
-
-Input: json file that has the form
-[{ file_path: 'path/img.jpg', captions: ['a caption', ...] }, ...]
-example element in this list would look like
-{'captions': [u'A man with a red helmet on a small moped on a dirt road. ', u'Man riding a motor bike on a dirt road on the countryside.', u'A man riding on the back of a motorcycle.', u'A dirt path with a young person on a motor bike rests to the foreground of a verdant area with a bridge and a background of cloud-wreathed mountains. ', u'A man in a red shirt and a red hat is on a motorcycle on a hill side.'], 'file_path': u'val2014/COCO_val2014_000000391895.jpg', 'id': 391895}
-
-This script reads this json, does some basic preprocessing on the captions
-(e.g. lowercase, etc.), creates a special UNK token, and encodes everything to arrays
-
-Output: a json file and an hdf5 file
-The hdf5 file contains several fields:
-/images is (N,3,256,256) uint8 array of raw image data in RGB format
-/labels is (M,max_length) uint32 array of encoded labels, zero padded
-/label_start_ix and /label_end_ix are (N,) uint32 arrays of pointers to the 
-  first and last indices (in range 1..M) of labels for each image
-/label_length stores the length of the sequence for each of the M sequences
-
-The json file has a dict that contains:
-- an 'ix_to_word' field storing the vocab in form {ix:'word'}, where ix is 1-indexed
-- an 'images' field that is a list holding auxiliary information for each image, 
-  such as in particular the 'split' it was assigned to.
-"""
-
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 import os
 import json
 import argparse
-from random import shuffle, seed
-import string
-# non-standard dependencies:
+from random import seed
+import sys
+
 import h5py
 import numpy as np
-# from scipy.misc import imread, imresize
-import sys
 from PIL import Image
-import imageio
+import imageio.v2 as imageio
 
-def resize_image(image, size):
-    """Resize an image to the given size."""
-    return image.resize(size, Image.LANCZOS)
+Image.MAX_IMAGE_PIXELS = None
+
+# -----------------------------------------------------------------------------
+# Ensure this directory exists so that each resized .jpg can be saved there
+RESIZED_DIR = "/data/npl/ICEK/Wikipedia/images_resized"
+os.makedirs(RESIZED_DIR, exist_ok=True)
+# -----------------------------------------------------------------------------
+
+def resize_image(image_array, size):
+    if isinstance(size, int):
+        size = (size, size)
+    pil_image = Image.fromarray(image_array)
+    return np.array(pil_image.resize(size, Image.Resampling.LANCZOS))
+
 
 def main(params, prefix):
-    input_json_path = '/content/ICECAP/'+params['dataset'] + '_data/'+params['dataset'] + '_cap_basic.json'
-    imgs = json.load(open(input_json_path, 'r'))
-    imgs = imgs['images']
-    seed(123)  # make reproducible
+    # Hard-coded JSON path under prefix
+    input_json_path = '/data/npl/ICEK/ICECAP/icecap-/' + params['dataset'] + '_data/' + \
+                      params['dataset'] + '_cap_basic.json'
+    imgs = json.load(open(input_json_path, 'r'))['images']
+
+    seed(123)
     missed_writer = open(prefix + 'missed.txt', 'w')
     missed_num = 0
-    # create output h5 file
+
     N = len(imgs)
-    print("Hello ")
-    output_h5_path = '/content/ICECAP/'+params['dataset'] + '_data/'+params['dataset'] + '_image.h5'
+    print("Hello (found {} images)".format(N))
+
+    # Hard-coded HDF5 path under prefix
+    output_h5_path = '/data/npl/ICEK/ICECAP/icecap-/' + params['dataset'] + '_data/' + \
+                     params['dataset'] + '_image.h5'
     f = h5py.File(output_h5_path, "w")
-    dset = f.create_dataset("images", (N, 3, 256, 256), dtype='uint8')  # space for resized images
-    print("hello")
+    dset = f.create_dataset("images", (N, 3, 256, 256), dtype='uint8')
+    print("Opened HDF5 for writing at:", output_h5_path)
+
     for i, img in enumerate(imgs):
-        # load the image
+        # img['file_path'] is expected to be something like "somefolder/0000009544.jpg"
+        img_path = img['file_path'].split("/")[1]
+        # Hard-coded source folder
+        real_img_path = os.path.join('/data/npl/ICEK/Wikipedia/images/', img_path)
+
         try:
-            I = imageio.imread(os.path.join('/content/ICECAP/ViWiki_data/' + img['file_path']))
-        except IOError as e:
+            I = imageio.imread(real_img_path)
+        except Exception as e:
+            print(f"Failed to read image: {real_img_path}. Error: {e}")
             missed_num += 1
-            # print('missed', missed_num)
-            missed_writer.write(img['file_path']+'\n')
+            missed_writer.write(img['file_path'] + '\n')
             continue
 
         try:
-            Ir = resize_image(I, 256)
-        except:
-            print('failed resizing image %s - see http://git.io/vBIE0' % (img['filepath'],))
-            raise
-        # handle grayscale input images
-        if len(Ir.shape) == 2:
-            Ir = Ir[:, :, np.newaxis]
-            Ir = np.concatenate((Ir, Ir, Ir), axis=2)
-        # and swap order of axes from (256,256,3) to (3,256,256)
-        Ir = Ir.transpose(2, 0, 1)
-        # write to h5
-        dset[i] = Ir
-        # if i % 1000 == 0:
-        sys.stdout.write('\rprocessing %d/%d (%.2f%% done) missed %d' % (i, N, i * 100.0 / N, missed_num))
-        sys.stdout.flush()
+            Ir = resize_image(I, 256)    # Ir is (256,256) or (256,256,C)
+        except Exception as e:
+            print(f"Failed resizing image {real_img_path}. Error: {e}")
+            missed_num += 1
+            missed_writer.write(img['file_path'] + '\n')
+            continue
+
+        # ── Drop alpha if it exists ──
+        if Ir.ndim == 3 and Ir.shape[2] == 4:
+            Ir = Ir[:, :, :3]            # Keep only R,G,B
+
+        # ── Handle grayscale or other channel counts ──
+        if Ir.ndim == 2:
+            # pure grayscale → (256,256) → replicate to (256,256,3)
+            Ir = np.stack([Ir, Ir, Ir], axis=2)
+
+        elif Ir.ndim == 3:
+            C = Ir.shape[2]
+            if C == 1:
+                # single-channel → replicate
+                Ir = np.concatenate([Ir, Ir, Ir], axis=2)
+            elif C == 2:
+                # two channels → treat channel 0 as gray, replicate it
+                gray = Ir[:, :, 0]
+                Ir = np.stack([gray, gray, gray], axis=2)
+            elif C == 3:
+                # already RGB → do nothing
+                pass
+            else:
+                # C ≥ 4 → drop extras
+                Ir = Ir[:, :, :3]
+
+        else:
+            # Unexpected ndim > 3 → flatten to first 3
+            Ir = Ir.reshape(256, 256, -1)[:, :, :3]
+
+        # At this point, Ir.shape == (256, 256, 3)
+        Ir_hw3 = Ir.copy()                   # Keep H×W×3 for saving JPEG
+        Ir_chw = Ir_hw3.transpose(2, 0, 1)   # Convert to (3,256,256) for HDF5
+
+        # Write the (3,256,256) array into HDF5
+        try:
+            dset[i] = Ir_chw
+        except Exception as e:
+            print(f"Error writing to HDF5 at index {i}: {e}")
+            missed_num += 1
+            missed_writer.write(img['file_path'] + '\n')
+            continue
+
+        # ── Save the same (256×256×3) array as a .jpg under RESIZED_DIR ──
+        out_path = os.path.join(RESIZED_DIR, img_path)
+        try:
+            Image.fromarray(Ir_hw3).save(out_path, format='JPEG')
+        except Exception as e:
+            print(f"Failed to save JPEG {out_path}: {e}")
+            # Not marking as “missed” because HDF5 succeeded
+
+        if i % 1000 == 0:
+            sys.stdout.write(
+                f"\rprocessing {i}/{N} ({i * 100.0 / N:.2f}% done) missed {missed_num}"
+            )
+            sys.stdout.flush()
+
     f.close()
     missed_writer.close()
-    print('image wrote to ', output_h5_path)
+    print("\nDone. Wrote HDF5 to", output_h5_path)
+    print("Missed {} images (listed in {}missed.txt)".format(missed_num, prefix))
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--dataset', default='breakingnews', choices=['breakingnews', 'goodnews','ViWiki'])
-    # options
-    parser.add_argument('--images_root', default='/content/ICECAP/ViWiki_data/viwiki_resized',
-                        help='root location in which images are stored, to be prepended to file_path in input json')
-    prefix = '/content/ICECAP/ViWiki_data'
+    parser.add_argument(
+        '--dataset',
+        default='ViWiki',
+        choices=['breakingnews', 'goodnews', 'ViWiki']
+    )
+    prefix = '/data/npl/ICEK/ICECAP/icecap-/ViWiki_data/'
     args = parser.parse_args()
-    params = vars(args)  # convert to ordinary dict
+    params = vars(args)
     print('parsed input parameters:')
     print(json.dumps(params, indent=2))
     main(params, prefix)

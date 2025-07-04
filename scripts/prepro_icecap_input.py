@@ -40,13 +40,105 @@ import math
 # import stop_words
 from difflib import SequenceMatcher
 import json
+# from py_vncorenlp import VnCoreNLP
+from collections import defaultdict
 from py_vncorenlp import VnCoreNLP
+import py_vncorenlp
+py_vncorenlp.download_model(save_dir='/data/npl/ICEK/ICECAP/VnCoreNLP')
+
 
 def load_vocab(params):
-    vocab_path = '/content/ICECAP/'+params['dataset']+'_data/'+params['dataset']+'_threshold4_vocab.json'
+    vocab_path = '/data/npl/ICEK/ICECAP/icecap-/' + params['dataset'] + '_data/' + params['dataset'] + '_threshold4_vocab.json'
     vocab = json.load(open(vocab_path, 'r', encoding='utf-8'))
+
+    # Thêm tag NER đặc biệt nếu chưa có
+    named_entities = ['PERSON', 'NORP', 'FAC', 'ORG', 'GPE', 'LOC', 'PRODUCT', 'EVENT',
+                      'WORK_OF_ART', 'LANGUAGE', 'DATE', 'TIME', 'PERCENT', 'MONEY',
+                      'QUANTITY', 'ORDINAL', 'CARDINAL', 'LAW']
+    named_entities_ = [name + '_' for name in named_entities]
+    max_idx = max(int(k) for k in vocab.keys())
+    for ner_tag in named_entities_:
+        if ner_tag not in vocab.values():
+            max_idx += 1
+            vocab[str(max_idx)] = ner_tag
+
     return vocab
 
+def extract_entities(text, model):
+    """
+    Sử dụng VnCoreNLP để trích xuất các thực thể từ văn bản.
+    Trả về một dictionary với các loại thực thể.
+    """
+    entities = defaultdict(set)  # Sử dụng set để loại bỏ trùng lặp
+    try:
+        if not text.strip():
+            return entities  # Trả về empty nếu text rỗng
+    except:
+        return entities
+    try:
+        annotated_text = model.annotate_text(text)
+    except Exception as e:
+        print(f"Lỗi khi annotating text: {e}")
+        return entities
+
+    # Danh sách nhãn ánh xạ chuẩn
+    label_mapping = {
+        "PER": "PERSON", "ORG": "ORG", "LOC": "LOC",
+        "GPE": "GPE", "NORP": "NORP", "MISC": "MISC", # bên paper ko sử dụng MISC
+        "B-PER": "PERSON", "I-PER": "PERSON",
+        "B-ORG": "ORG", "I-ORG": "ORG",
+        "B-LOC": "LOC", "I-LOC": "LOC",
+        "B-GPE": "GPE", "I-GPE": "GPE",
+        "B-NORP": "NORP", "I-NORP": "NORP",
+        "B-MISC": "MISC", "I-MISC": "MISC"
+    }
+
+    for sent in annotated_text:
+        for word in annotated_text[sent]:
+            ent_type = label_mapping.get(word.get('nerLabel', ''), '')
+            ent_text = word.get('wordForm', '').strip()
+            if ent_type and ent_text:
+                entities[ent_type].add(' '.join(ent_text.split('_')))
+
+    return {key: list(value) for key, value in entities.items()}
+
+def tokenize_and_pointerize_with_extract(text, model, ner_counter):
+    """
+    Tokenize sentence, detect NER using your extract_entities function,
+    and return tokenized sentence with pointer-style NERs.
+    """
+    entities_dict = extract_entities(text, model)
+
+    # Flatten into span -> type mapping
+    ent2type = {}
+    for ent_type, mentions in entities_dict.items():
+        for mention in mentions:
+            ent2type[mention] = ent_type
+
+    # Tokenize
+    tokens = text.strip().split()  # Can replace with better tokenizer if needed
+    replaced_tokens = []
+    ner_dict = {}  # Pointer to original entity string
+
+    i = 0
+    while i < len(tokens):
+        matched = False
+        for mention in sorted(ent2type.keys(), key=lambda x: -len(x.split())):  # match longest entity
+            mention_tokens = mention.split()
+            if tokens[i:i+len(mention_tokens)] == mention_tokens:
+                ent_type = ent2type[mention]
+                pointer = f"{ent_type}-{ner_counter[ent_type]}"
+                ner_counter[ent_type] += 1
+                replaced_tokens.append(pointer)
+                ner_dict[pointer] = mention
+                i += len(mention_tokens)
+                matched = True
+                break
+        if not matched:
+            replaced_tokens.append(tokens[i])
+            i += 1
+
+    return replaced_tokens, ner_dict
 
 def encode_captions(imgs, params, wtoi):
     """
@@ -226,13 +318,16 @@ def to_pointers_cap(ent_txt, ent_type, article_ner_pointers, part=True, type_com
         return -1
 
 def load_stop_words():
-    with open('/content/ICECAP/vietnamese-stopwords.txt', 'r', encoding='utf-8') as file:
+    with open('/data/npl/ICEK/ICECAP/icecap-/vietnamese-stopwords.txt', 'r', encoding='utf-8') as file:
         stopwords = list(set(file.read().splitlines()))
     # for i, stop_word in enumerate(stopwords):
     #     stopwords[i] = model.word_segment(stop_word)[0]
     return stopwords
 
 def encode_related_sentences(imgs, articles, wtoi, params):
+    
+    vncorenlp_model = VnCoreNLP(save_dir='/data/npl/ICEK/ICECAP/VnCoreNLP', annotators=["wseg","ner"], max_heap_size='-Xmx4g')
+
     named_entities = ['PERSON', 'NORP', 'FAC', 'ORG', 'GPE', 'LOC', 'PRODUCT', 'EVENT', 'WORK_OF_ART', 'LANGUAGE',
                       'DATE', 'TIME', 'PERCENT', 'MONEY', 'QUANTITY', 'ORDINAL', 'CARDINAL', 'LAW']
     named_entities_ = [name+'_' for name in named_entities]
@@ -243,7 +338,7 @@ def encode_related_sentences(imgs, articles, wtoi, params):
     retr_w_num = 0
     retr_unk_num = 0
     # if params['name_att']:
-    with open('/content/ICECAP/'+params['dataset']+'_data/' + params['dataset'] + '_df.json', 'r') as f:
+    with open('/data/npl/ICEK/ICECAP/icecap-/'+params['dataset']+'_data/' + params['dataset'] + '_df.json', 'r') as f:
         df_dict = json.load(f)
     stopwords = load_stop_words()
     candidates_dict = {}
@@ -256,7 +351,9 @@ def encode_related_sentences(imgs, articles, wtoi, params):
         assert len(img['final_captions']) == 1
         final_caption = img['final_captions'][0]
         full = img['sentences_full'][0]['tokens']
-        # assert len(final_caption) == len(full)
+        # print(final_caption)
+        # print(full)
+        assert len(final_caption) == len(full), f"Length mismatch: {len(final_caption)} vs {len(full)}"
         # sim_sentences = [id_s[0] for id_s in img['sim_sentences']]
         retrieved_sentences = img['retrieved_sentences']
         random_sentences = img['random_sentences']
@@ -275,26 +372,39 @@ def encode_related_sentences(imgs, articles, wtoi, params):
         raw_ner_dict = articles[article_id]['ner']
         ner_dict = organize_ner(raw_ner_dict, stopwords)
         # if params['template_index']:
-        raw_ner_dict = articles[article_id]['ner']
+        # raw_ner_dict = articles[article_id]['ner']
 
         # collect retrieved sentences
-        for id in retrieved_sentences[:params['related_sent_num']]:
-            score = BM25_score(final_caption, sentences_str[id].split(' '), df_dict, stopwords, params['dataset'])
-            scores += [score]*len(sentences_str[id].split(' '))
-            retrieved_sentences_str += sentences_str[id].split(' ')
+        ner_counter = defaultdict(int)
+        for sentence in retrieved_sentences[:params['related_sent_num']]:
+            try:
+                sentence_text = str(sentence)
+                if sentence_text.strip():
+                    tokens, ner_map = tokenize_and_pointerize_with_extract(sentence_text, vncorenlp_model, ner_counter)
+                else:
+                    tokens, ner_map = [], {}
+            except Exception as e:
+                print(f"[Warning] sentence_id={sentence_id} caused error: {e}, using empty tokens.")
+                tokens, ner_map = [], {}
+            
+            score = BM25_score(final_caption, tokens, df_dict, stopwords, params['dataset'])
+            scores += [score] * len(tokens)
+            retrieved_sentences_str += tokens
+            ner_dict.update(ner_map)
         retrieved_sentences_str = retrieved_sentences_str[:params['max_word_num']]
 
         # collect randomly chosen sentences
         if params['ran_w']:
             for random_item in random_sentences:
                 random_sentences_str = []
-                for id in random_item:
-                    random_sentences_str += sentences_str[id].split(' ')
+                for sentence in random_item:
+                    random_sentences_str += sentence.split(' ')
                 randoms_sentences_str.append(random_sentences_str[:params['max_word_num']])
 
         scores = scores[:params['att_range']]
         att_indexes = np.zeros(shape=(params['max_length'], params['gold_num']), dtype='uint32') # idnex start from 1, 0 represents no index
         for m, token_c in enumerate(final_caption[:params['max_length']]):
+            # print(f"[Debug tokens] retrieved_sentences_str[:att_range] = {retrieved_sentences_str[:params['att_range']]}")
             if token_c in named_entities_:
                 nametype = token_c
                 name = full[m]
@@ -304,6 +414,7 @@ def encode_related_sentences(imgs, articles, wtoi, params):
                         if token_s in ner_dict:
                             name_s = ner_dict[token_s]
                             if (name in name_s or name_s in name) and nametype == token_s.split('-')[0]+'_':
+                                # print(f"[Debug match] name={name} <--> name_s={name_s} | type: {nametype} vs {token_s.split('-')[0]+'_'} | score={scores[n]}")
                                 candidates.append((n, name_s, scores[n]))
                 candidates_dict[len(candidates)] = candidates_dict.get(len(candidates), 0) + 1
                 if len(candidates) > 0:
@@ -313,7 +424,8 @@ def encode_related_sentences(imgs, articles, wtoi, params):
                     for k, can in enumerate(candidates[:params['gold_num']]):
                         att_index[k] = can[0] + 1
                     att_indexes[m] = att_index
-
+        nonzeros = (att_indexes > 0).sum()
+        # print(f"[Debug] Image {i}: Non-zero att_indexes = {nonzeros}")
         all_att_indexes.append(att_indexes)
         # if params['template_index']:
         template_indexes = np.zeros(params['max_length'], dtype='uint32') # idnex for template caption, start from 1, 0 represents no index
@@ -372,7 +484,7 @@ def encode_related_sentences(imgs, articles, wtoi, params):
 
     print('retr unk %.4f' % (float(retr_unk_num)/retr_w_num))
 
-    save_dir = '/content/ICECAP/'+params['dataset']+'_data/'
+    save_dir = '/data/npl/ICEK/ICECAP/icecap-/'+params['dataset']+'_data/'
     # h5 file to store id sequence of concatenated retrieved sentences
     retr_w_lb_name = save_dir + params['dataset'] + '_retr10_words' + str(params['max_word_num']) +  '_word_ids.h5'
     retr_w_lb = h5py.File(retr_w_lb_name, "w")
@@ -402,13 +514,15 @@ def encode_related_sentences(imgs, articles, wtoi, params):
     print('gt word-level matching save to', word_match_lb_name)
 
 
-def main(params):
-    cap_json_path = '/content/ICECAP/'+params['dataset']+'_data/'+params['dataset']+'_ttv.json'
+def main(params):    
+    cap_json_path = '/data/npl/ICEK/ICECAP/icecap-/'+params['dataset']+'_data/'+params['dataset']+'_ttv.json'
     imgs = json.load(open(cap_json_path, 'r'))
-    article_json_path = '/content/ICECAP/'+params['dataset']+'_data/'+params['dataset']+'_article_icecap.json'
+    article_json_path = '/data/npl/ICEK/ICECAP/icecap-/'+params['dataset']+'_data/'+params['dataset']+'_article_icecap.json'
     with open(article_json_path, 'r') as f:
          articles = json.load(f)
-
+    named_entities = ['PERSON', 'NORP', 'FAC', 'ORG', 'GPE', 'LOC', 'PRODUCT', 'EVENT', 'WORK_OF_ART', 'LANGUAGE',
+                      'DATE', 'TIME', 'PERCENT', 'MONEY', 'QUANTITY', 'ORDINAL', 'CARDINAL', 'LAW']
+    named_entities_ = [name+'_' for name in named_entities]
     seed(123)  # make reproducible
     # create the vocab
     vocab = load_vocab(params)
@@ -418,7 +532,15 @@ def main(params):
         img['final_captions'] = []
         for sent in img['sentences']:
             txt = sent['tokens']
-            caption = [w if w in wtoi.keys() else 'UNK' for w in txt]
+            caption = []
+            for w in txt:
+                if w in named_entities_:
+                    # caption.append('UNK') 
+                    caption.append(w)  # Preserve NER tag
+                elif w in wtoi:
+                    caption.append(w)
+                else:
+                    caption.append('UNK')
             img['final_captions'].append(caption)
     # encode retrieved relevant sentences
     encode_related_sentences(imgs, articles, wtoi, params)
@@ -428,7 +550,7 @@ def main(params):
 
     # N = len(imgs)
     # h5 file to store id sequence of gt caption
-    cap_h5_path = '/content/ICECAP/'+params['dataset']+'_data/'+params['dataset']+'_cap_label.h5'
+    cap_h5_path = '/data/npl/ICEK/ICECAP/icecap-/'+params['dataset']+'_data/'+params['dataset']+'_cap_label.h5'
     f_lb = h5py.File(cap_h5_path, "w")
     f_lb.create_dataset("labels", dtype='uint32', data=L)
     f_lb.create_dataset("label_start_ix", dtype='uint32', data=label_start_ix)
@@ -454,7 +576,7 @@ def main(params):
 
         out['images'].append(jimg) # thì ra đây là nơi chứa ảnh 
     # store basic information (e.g. id2word dictionary and filepath of each image)
-    basic_info_json_path = '/content/ICECAP/'+params['dataset']+'_data/'+params['dataset']+'_cap_basic.json'
+    basic_info_json_path = '/data/npl/ICEK/ICECAP/icecap-/'+params['dataset']+'_data/'+params['dataset']+'_cap_basic.json'
     json.dump(out, open(basic_info_json_path, 'w'))
     print('basic info json save to', basic_info_json_path)
 
@@ -463,7 +585,7 @@ if __name__ == "__main__":
 
     # model = VnCoreNLP(save_dir='/content/', annotators=["wseg","ner"], max_heap_size='-Xmx4g')
     parser = argparse.ArgumentParser()
-    parser.add_argument('--dataset', default='breakingnews', choices=['breakingnews', 'goodnews','ViWiki'])
+    parser.add_argument('--dataset', default='ViWiki', choices=['breakingnews', 'goodnews','ViWiki'])
     # some important parameters
     parser.add_argument('--max_length', default=31, type=int,
                         help='max length of a caption, in number of words. captions longer than this get clipped.')

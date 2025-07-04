@@ -109,8 +109,8 @@ def get_weighted_avg_data(article, get_vector_avg_weighted):
 
 
 if __name__ == '__main__':
-    model = VnCoreNLP(save_dir='/content/', annotators=["wseg","ner"], max_heap_size='-Xmx4g')
-    model_embed = fasttext.load_model('/content/cc.vi.300.bin')  # Load mô hình
+    model = VnCoreNLP(save_dir='/data/npl/ICEK/ICECAP/VnCoreNLP/', annotators=["wseg","ner"], max_heap_size='-Xmx4g')
+    model_embed = fasttext.load_model('/data/npl/ICEK/ICECAP/icecap-/data/cc.vi.300.bin')  # Load mô hình
     dataset = 'ViWiki'  # breakingewns/goodnews
     np.random.seed(42)
     # nlp = spacy.load('en_core_web_lg', disable=['parser', 'tagger'])
@@ -120,7 +120,7 @@ if __name__ == '__main__':
         sen_len = 62
     else:
         sen_len = 54
-    article_json_path = '/content/ICECAP/'+dataset+'_data/'+dataset+'_article.json'
+    article_json_path = '/data/npl/ICEK/ICECAP/icecap-/'+dataset+'_data/'+dataset+'_article.json'
     full = open_json(article_json_path)
     print('loaded', article_json_path)
     full_num = len(full.values())
@@ -130,10 +130,11 @@ if __name__ == '__main__':
             tokens = list(set(t.lower() for t in model.word_segment(elm)[0].split(' ')))
             count_full.update(tokens)
         tokenized_num += 1
-        sys.stdout.write(
-            '\r Tokenizing articless: %d/%d articles processed...' % (tokenized_num, full_num))
-        sys.stdout.flush()
+        if tokenized_num % 1000 == 0:
+            sys.stdout.write(
+                '\r Tokenizing articless: %d/%d articles processed...' % (tokenized_num, full_num))
+            sys.stdout.flush()
     
     keys, data = get_weighted_avg_data(full, get_vector_avg_weighted_full)
-    json.dump(keys, open('/content/ICECAP/'+dataset+'_data/'+dataset+'_articles_full_WeightedAvg_keys.json', 'w', encoding='utf-8'))
-    save_h5('/content/ICECAP/'+dataset+'_data/'+dataset+'_articles_full_WeightedAvg.h5', data)
+    json.dump(keys, open('/data/npl/ICEK/ICECAP/icecap-/'+dataset+'_data/'+dataset+'_articles_full_WeightedAvg_keys.json', 'w', encoding='utf-8'))
+    save_h5('/data/npl/ICEK/ICECAP/icecap-/'+dataset+'_data/'+dataset+'_articles_full_WeightedAvg.h5', data)
