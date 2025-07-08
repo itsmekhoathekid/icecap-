@@ -231,7 +231,7 @@ if __name__=='__main__':
     parser.add_argument('--split', default='test', choices=['test', 'val'])
     parser.add_argument('--template_path', type=str, default='/data/npl/ICEK/ICECAP/icecap-/ViWiki_output/ViWiki_test.json',
                         help='template path to insert named entities according word-level matching distribution')
-    parser.add_argument('--dump', type=bool, default=False, help='Save the inserted captions in a json file')
+    parser.add_argument('--dump', type=bool, default=True, help='Save the inserted captions in a json file')
     args = parser.parse_args()
     params = vars(args)  # convert to ordinary dict
     print('parsed input parameters:')

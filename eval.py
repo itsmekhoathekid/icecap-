@@ -158,7 +158,6 @@ if 'index_size' not in vars(opt):
 # print('index size:', opt.index_size)
 # print('word length', opt.word_length)
 print("LOADED VOCAB!")
-
 # Setup the model
 cnn_model = utils.build_cnn(opt)
 cnn_model.load_state_dict(torch.load(opt.cnn_model_path))
